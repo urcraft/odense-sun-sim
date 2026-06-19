@@ -26,6 +26,9 @@
   label{display:block;font-size:13px;color:var(--mut);margin-bottom:7px}
   input[type=range]{width:100%;accent-color:var(--accent)}
   input[type=date]{background:#0f141c;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+  /* native calendar glyph is dark by default — invert so it shows on the dark field */
+  input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(.85);cursor:pointer;opacity:.8}
+  input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:1}
   .readout{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
   .stat{background:#10151d;border:1px solid var(--line);border-radius:11px;padding:11px 13px}
   .stat .k{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}

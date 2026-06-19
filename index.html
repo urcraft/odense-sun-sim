@@ -89,14 +89,9 @@
       <input type="range" id="time" min="0" max="1439" step="5" value="900">
       <div class="btns" style="margin-top:9px">
         <button class="play" id="play">▶ Play day</button>
+        <button id="now">⌖ Now</button>
         <button id="noon">Jump to solar noon</button>
       </div>
-    </div>
-
-    <div class="row">
-      <label>Balcony / living-room windows face — <span id="faceLbl">S (180°)</span></label>
-      <input type="range" id="face" min="0" max="359" step="1" value="180">
-      <div class="note">Not sure of the real direction? At solar noon the sun is due <b>south</b>. Hit “Jump to solar noon”, then turn this dial until the sun sits over the side your flat's sun actually comes from at midday — that reading is your true orientation.</div>
     </div>
 
     <div class="readout">
@@ -115,6 +110,9 @@
 <script>
 const D2R=Math.PI/180, R2D=180/Math.PI;
 const LAT=55.40, LON=10.39, UTC=2;            // Odense, CEST
+// Fixed orientation (measured with a phone compass against the bedroom facade):
+// bedrooms face true 354° (≈N); the balcony/living side faces the opposite, 174° (≈S).
+const FACE=174;
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const g=id=>document.getElementById(id);
 
@@ -169,11 +167,11 @@ function label(t,cxf,cyf,c,sz){ctx.fillStyle=c||'#8b97a6';ctx.font=(sz||11)+'px 
   ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,fx(cxf),fy(cyf));}
 
 function draw(){
-  const dateStr=g('date').value, clockMin=+g('time').value, face=+g('face').value;
+  const dateStr=g('date').value, clockMin=+g('time').value, face=FACE;
   const bedFace=(face+180)%360, s=sun(dateStr,clockMin);
 
   const hh=String(Math.floor(clockMin/60)).padStart(2,'0'), mm=String(clockMin%60).padStart(2,'0');
-  g('timeLbl').textContent=`${hh}:${mm}`; g('faceLbl').textContent=`${compass(face)} (${face}°)`;
+  g('timeLbl').textContent=`${hh}:${mm}`;
   g('elev').textContent= s.elev>0? s.elev.toFixed(0)+'°':'below horizon';
   g('az').textContent= s.elev>0? `${compass(s.az)} (${s.az.toFixed(0)}°)`:'–';
   const sh=((s.solarHour%24)+24)%24;
@@ -360,7 +358,7 @@ function draw(){
 }
 
 // ---- wiring ----
-['date','time','face'].forEach(id=>g(id).addEventListener('input',draw));
+['date','time'].forEach(id=>g(id).addEventListener('input',draw));
 let playing=false, raf=null;
 g('play').addEventListener('click',function(){
   playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play day';
@@ -373,7 +371,16 @@ g('noon').addEventListener('click',()=>{
   const B=D2R*360*(N-81)/364,eot=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);
   const tc=eot+4*(LON-15*UTC); g('time').value=Math.round(720-tc); draw();
 });
-draw();
+
+// snap date + time slider to the device's current local clock (device runs Odense/CEST time)
+function setNow(){
+  const now=new Date(), pad=n=>String(n).padStart(2,'0');
+  g('date').value=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  g('time').value=Math.min(1439,Math.round((now.getHours()*60+now.getMinutes())/5)*5);
+  draw();
+}
+g('now').addEventListener('click',()=>{ playing=false; g('play').textContent='▶ Play day'; setNow(); });
+setNow();   // open on the real here-and-now
 </script>
 </body>
 </html>

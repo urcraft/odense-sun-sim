@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sun &amp; Heat Simulator — Odense</title>
+<style>
+  :root{
+    --bg:#0c0f15; --panel:#141923; --panel2:#10141c; --line:#262e3a; --txt:#eaeff6; --mut:#9aa6b5;
+    --sun:#ffcf4d; --hot:#ff7a59; --cool:#5ec8ff; --glass:#3aa0ff; --lit:#ffd24d; --accent:#7cd6a0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 700px at 70% -10%,#161d29,transparent),var(--bg);
+    color:var(--txt);font:15px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{padding:20px 24px 4px}
+  h1{margin:0;font-size:20px;font-weight:680;letter-spacing:.2px}
+  .sub{color:var(--mut);font-size:13px;margin-top:3px}
+  .wrap{display:flex;gap:18px;flex-wrap:wrap;padding:14px 24px 34px;align-items:flex-start}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  canvas{display:block;border-radius:12px;width:100%;height:auto;max-width:560px;margin:0 auto;
+    background:radial-gradient(420px 420px at 50% 46%,#11161f,#0a0d12)}
+  .card:first-child{flex:1 1 360px;min-width:0}
+  .controls{flex:1 1 320px;min-width:0;max-width:440px}
+  .row{margin:15px 0}
+  label{display:block;font-size:13px;color:var(--mut);margin-bottom:7px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=date]{background:#0f141c;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+  .readout{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .stat{background:#10151d;border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+  .stat .k{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  .stat .v{font-size:17px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px}
+  .lit-yes{color:var(--hot)} .lit-no{color:var(--cool)}
+  button{background:#1d2632;color:var(--txt);border:1px solid var(--line);
+    border-radius:10px;padding:9px 14px;font-size:14px;cursor:pointer;transition:.15s}
+  button:hover{border-color:#465264;background:#222d3b}
+  button.play{background:var(--accent);color:#06140c;border:none;font-weight:680}
+  button.play:hover{filter:brightness(1.06)}
+  .tips{margin-top:15px;font-size:13.5px;color:var(--txt);background:#10151d;border:1px solid var(--line);
+    border-left:3px solid var(--lit);border-radius:10px;padding:11px 13px}
+  .tips b{color:var(--lit)}
+  .legend{display:flex;gap:15px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:11px;justify-content:center}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .note{font-size:12px;color:var(--mut);margin-top:7px}
+  .btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input[type=range]{height:30px}                 /* bigger touch target */
+  @media (max-width:640px){
+    body{font-size:14px}
+    header{padding:12px 14px 2px} h1{font-size:18px}
+    .wrap{padding:8px 12px 26px;gap:10px;flex-direction:column}
+    .card{padding:10px;border-radius:14px}
+    .controls{max-width:none;flex-basis:auto}
+    /* pin the map to the top so it stays visible while you scroll the controls */
+    .card:first-child{flex-basis:auto;position:sticky;top:6px;z-index:5;padding-bottom:6px}
+    canvas{max-width:min(100%,46vh)}              /* compact map so a control fits below it */
+    .legend{gap:8px 14px;font-size:11px;margin-top:7px}
+    button{padding:11px 14px}                     /* easier to tap */
+    .stat{padding:9px 11px} .stat .v{font-size:16px}
+    .row{margin:12px 0}
+  }
+  @media (max-width:380px){ .readout{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header>
+  <h1>☀ Sun &amp; Heat Simulator</h1>
+  <div class="sub">Odense · 55.40°N, 10.39°E · top-floor flat. Your real layout — watch which rooms catch the sun.</div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <canvas id="cv" width="560" height="560"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--lit)"></i>window in direct sun</span>
+      <span><i style="background:var(--glass)"></i>window shaded</span>
+      <span><i style="background:var(--sun)"></i>sun</span>
+      <span><i style="background:#3b4654"></i>stairwell</span>
+    </div>
+  </div>
+
+  <div class="card controls">
+    <div class="row">
+      <label>Date</label>
+      <input type="date" id="date" value="2026-07-01">
+    </div>
+
+    <div class="row">
+      <label>Time of day — <span id="timeLbl">15:00</span> (clock, CEST)</label>
+      <input type="range" id="time" min="0" max="1439" step="5" value="900">
+      <div class="btns" style="margin-top:9px">
+        <button class="play" id="play">▶ Play day</button>
+        <button id="noon">Jump to solar noon</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <label>Balcony / living-room windows face — <span id="faceLbl">S (180°)</span></label>
+      <input type="range" id="face" min="0" max="359" step="1" value="180">
+      <div class="note">Not sure of the real direction? At solar noon the sun is due <b>south</b>. Hit “Jump to solar noon”, then turn this dial until the sun sits over the side your flat's sun actually comes from at midday — that reading is your true orientation.</div>
+    </div>
+
+    <div class="readout">
+      <div class="stat"><div class="k">Sun elevation</div><div class="v" id="elev">–</div></div>
+      <div class="stat"><div class="k">Sun compass</div><div class="v" id="az">–</div></div>
+      <div class="stat"><div class="k">Living / balcony (S)</div><div class="v" id="litLiving">–</div></div>
+      <div class="stat"><div class="k">Bedrooms (N)</div><div class="v" id="litBeds">–</div></div>
+      <div class="stat"><div class="k">Solar time</div><div class="v" id="solar">–</div></div>
+      <div class="stat"><div class="k">Daylight</div><div class="v" id="daylen">–</div></div>
+    </div>
+
+    <div class="tips" id="tips"></div>
+  </div>
+</div>
+
+<script>
+const D2R=Math.PI/180, R2D=180/Math.PI;
+const LAT=55.40, LON=10.39, UTC=2;            // Odense, CEST
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const g=id=>document.getElementById(id);
+
+function dayOfYear(d){const s=new Date(d.getFullYear(),0,0);return Math.floor((d-s)/86400000);}
+function compass(az){const n=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return n[Math.round((((az%360)+360)%360)/22.5)%16];}
+
+// ---- solar position ----
+function sun(dateStr, clockMin){
+  const d=new Date(dateStr+'T00:00:00'); const N=dayOfYear(d);
+  const decl=23.45*Math.sin(D2R*360*(284+N)/365);
+  const B=D2R*360*(N-81)/364;
+  const eot=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);
+  const tc=eot+4*(LON-15*UTC);
+  const solarHour=(clockMin+tc)/60;
+  const H=15*(solarHour-12);
+  const sinEl=Math.sin(LAT*D2R)*Math.sin(decl*D2R)+Math.cos(LAT*D2R)*Math.cos(decl*D2R)*Math.cos(H*D2R);
+  const elev=Math.asin(Math.max(-1,Math.min(1,sinEl)))*R2D;
+  let cosAz=(Math.sin(decl*D2R)-Math.sin(elev*D2R)*Math.sin(LAT*D2R))/(Math.cos(elev*D2R)*Math.cos(LAT*D2R));
+  cosAz=Math.max(-1,Math.min(1,cosAz)); let az=Math.acos(cosAz)*R2D; if(H>0) az=360-az;
+  const cosH0=-Math.tan(LAT*D2R)*Math.tan(decl*D2R);
+  let dayHours=24; if(cosH0>=-1&&cosH0<=1){dayHours=2*Math.acos(cosH0)*R2D/15;}
+  return {elev,az,solarHour,dayHours};
+}
+function adiff(a,b){let d=Math.abs(a-b)%360; return d>180?360-d:d;}
+
+// ---- floor-plan geometry (fractions of the plan box; north=top, south/balcony=bottom) ----
+// Faithful to the colourised plan (nanobananaeditedimage.jpg): Bedroom 1 (NW, blue) +
+// Bedroom 2 (N, green) across the top, a large winder stairwell in the NE, the bathroom
+// on the west side (yellow) beside the entrance/hall (grey), and one open kitchen/living
+// area (tan) filling the bottom-left with a central galley counter. The balcony hangs off
+// the south (bottom-left) edge. Footprint is an L: wide top, bottom-right corner cut away.
+const PW=216, PH=288;                              // plan box size
+let BX, BY;                                         // box top-left (set in draw)
+const fx=f=>BX+f*PW, fy=f=>BY+f*PH;
+// room rects [fx0,fy0,fx1,fy1] — fractions of the plan box
+const R={
+  bed1   :[0.00,0.00,0.35,0.31],     // Bedroom 1 (NW, blue, slightly bigger)
+  bed2   :[0.39,0.00,0.69,0.31],     // Bedroom 2 (N, green)
+  stair  :[0.71,0.00,0.98,0.46],     // winder stairwell (NE)
+  bath   :[0.00,0.31,0.26,0.56],     // Bathroom (W, yellow)
+  hall   :[0.26,0.31,0.71,0.46],     // Entrance / Hall (grey)
+  closet :[0.00,0.56,0.26,0.64],     // storage below the bath
+  living :[0.00,0.46,0.55,1.00],     // Kitchen / Living (open, tan) — main floor
+  kalcove:[0.55,0.46,0.71,0.62]      // kitchen alcove tucked under the hall (right)
+};
+// apartment envelope outline (L-shape: wide top, bottom-right corner cut away)
+const FOOT=[[0,0],[0.98,0],[0.98,0.46],[0.71,0.46],[0.71,0.62],[0.55,0.62],[0.55,1.00],[0,1.00]];
+function rrect(r,fill,stroke,sw){const x=fx(r[0]),y=fy(r[1]),w=(r[2]-r[0])*PW,h=(r[3]-r[1])*PH;
+  if(fill){ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);} if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=sw||1;ctx.strokeRect(x,y,w,h);} return {x,y,w,h};}
+function label(t,cxf,cyf,c,sz){ctx.fillStyle=c||'#8b97a6';ctx.font=(sz||11)+'px system-ui';
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,fx(cxf),fy(cyf));}
+
+function draw(){
+  const dateStr=g('date').value, clockMin=+g('time').value, face=+g('face').value;
+  const bedFace=(face+180)%360, s=sun(dateStr,clockMin);
+
+  const hh=String(Math.floor(clockMin/60)).padStart(2,'0'), mm=String(clockMin%60).padStart(2,'0');
+  g('timeLbl').textContent=`${hh}:${mm}`; g('faceLbl').textContent=`${compass(face)} (${face}°)`;
+  g('elev').textContent= s.elev>0? s.elev.toFixed(0)+'°':'below horizon';
+  g('az').textContent= s.elev>0? `${compass(s.az)} (${s.az.toFixed(0)}°)`:'–';
+  const sh=((s.solarHour%24)+24)%24;
+  g('solar').textContent=`${String(Math.floor(sh)).padStart(2,'0')}:${String(Math.round((sh%1)*60)).padStart(2,'0')}`;
+  g('daylen').textContent=s.dayHours.toFixed(1)+' h';
+
+  const up=s.elev>0, glancing=s.elev>0&&s.elev<12;
+  const livingLit=up&&adiff(s.az,face)<90, bedsLit=up&&adiff(s.az,bedFace)<90;
+  const litTxt=on=>on?(glancing?'sun (low/weak)':'IN SUN'):'shaded';
+  g('litLiving').innerHTML=`<span class="${livingLit?'lit-yes':'lit-no'}">${litTxt(livingLit)}</span>`;
+  g('litBeds').innerHTML=`<span class="${bedsLit?'lit-yes':'lit-no'}">${litTxt(bedsLit)}</span>`;
+
+  // ---------- canvas ----------
+  const W=560,Hh=560; ctx.clearRect(0,0,W,Hh);
+  const cx=280, cy=276, RAD=176;
+  BX=cx-PW/2; BY=cy-PH/2;
+
+  // sky disc tinted by elevation
+  ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,RAD+62,0,7); ctx.clip();
+  const sky= up? `rgb(${Math.round(26+s.elev*1.5)},${Math.round(34+s.elev*1.2)},${Math.round(54-s.elev*0.2)})`:'#0a0d13';
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,Hh); ctx.restore();
+
+  // azimuth -> screen unit vector (balcony `face` maps to screen-down)
+  const vec=az=>{const b=((az-(face+180))%360+360)%360*D2R; return [Math.sin(b),-Math.cos(b)];};
+
+  // faint full-day sun path
+  ctx.strokeStyle='rgba(255,207,77,.22)'; ctx.lineWidth=2; ctx.beginPath(); let st=false;
+  for(let m=0;m<=1439;m+=8){const p=sun(dateStr,m); if(p.elev<=0){st=false;continue;}
+    const v=vec(p.az),x=cx+v[0]*(RAD+30),y=cy+v[1]*(RAD+30); st?ctx.lineTo(x,y):ctx.moveTo(x,y); st=true;}
+  ctx.stroke();
+
+  // compass ring + cardinals
+  ctx.strokeStyle='#283341'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(cx,cy,RAD+30,0,7); ctx.stroke();
+  [['N',0],['E',90],['S',180],['W',270]].forEach(([t,a])=>{const v=vec(a);
+    ctx.fillStyle= t==='N'?'#cdd6e1':'#75808f'; ctx.font=(t==='N'?'bold ':'')+'13px system-ui';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,cx+v[0]*(RAD+47),cy+v[1]*(RAD+47));});
+
+  // ================= THE FLAT =================
+  const wallO='#5a6678', wallI='#3a4452';
+  // hued floors echoing the colourised reference plan (muted for the dark theme)
+  const cTan='#2a2519', cBlue='#1b2b44', cGreen='#1d3329', cYellow='#34311c',
+        cGrey='#262b33', cStair='#1a1f27', cCloset='#14181e';
+
+  // trace the L-shaped envelope as a path
+  const footPath=()=>{ctx.beginPath(); FOOT.forEach((p,i)=>{const X=fx(p[0]),Y=fy(p[1]); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);}); ctx.closePath();};
+
+  // envelope floor (tan = kitchen/living) + soft drop shadow (clipped to the L outline)
+  ctx.save(); ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=18; ctx.shadowOffsetY=6;
+  footPath(); ctx.fillStyle=cTan; ctx.fill(); ctx.restore();
+
+  // room floors (hued like the reference); living + kalcove stay the tan base
+  rrect(R.bed1,cBlue); rrect(R.bed2,cGreen); rrect(R.bath,cYellow);
+  rrect(R.hall,cGrey); rrect(R.closet,cCloset);
+
+  // large winder stairwell, NE
+  const stv=rrect(R.stair,cStair);
+  ctx.save(); ctx.beginPath(); ctx.rect(stv.x,stv.y,stv.w,stv.h); ctx.clip();
+  const scx=fx(0.845), scy=fy(0.20), ri=4, ro=Math.min(stv.w,stv.h)*0.62;
+  ctx.strokeStyle='#2c3744'; ctx.lineWidth=1;                           // winder treads
+  for(let i=0;i<14;i++){const a=(-95+i*22)*D2R; ctx.beginPath();
+    ctx.moveTo(scx+Math.cos(a)*ri,scy+Math.sin(a)*ri); ctx.lineTo(scx+Math.cos(a)*ro,scy+Math.sin(a)*ro); ctx.stroke();}
+  ctx.beginPath(); ctx.arc(scx,scy,ro,-100*D2R,210*D2R); ctx.stroke();   // outer rail
+  ctx.beginPath(); ctx.arc(scx,scy,ri,0,7); ctx.fillStyle='#1b232e'; ctx.fill(); // central newel
+  ctx.restore();
+
+  // ---- sun "heat" wash into lit rooms (warm gradient from the lit window) ----
+  function wash(r, fromTop, strength){
+    const x=fx(r[0]),y=fy(r[1]),w=(r[2]-r[0])*PW,h=(r[3]-r[1])*PH;
+    const gr=ctx.createLinearGradient(0, fromTop?y:y+h, 0, fromTop?y+h:y);
+    gr.addColorStop(0,`rgba(255,150,60,${strength})`); gr.addColorStop(1,'rgba(255,150,60,0)');
+    ctx.fillStyle=gr; ctx.fillRect(x,y,w,h);
+  }
+  const heat= up? 0.10+0.34*Math.sin(s.elev*D2R):0;
+  // only the open kitchen/living sits behind the south glazing; bath/hall are landlocked
+  if(livingLit){ wash(R.living,false,heat); }
+  if(bedsLit){ wash(R.bed1,true,heat*0.9); wash(R.bed2,true,heat*0.9); }
+
+  // ---- interior walls (thin) ----
+  ctx.strokeStyle=wallI; ctx.lineWidth=1.5;
+  const seg=(a,b,c,d)=>{ctx.beginPath();ctx.moveTo(fx(a),fy(b));ctx.lineTo(fx(c),fy(d));ctx.stroke();};
+  seg(0.37,0.00,0.37,0.31);         // Bedroom 1 | Bedroom 2
+  seg(0.00,0.31,0.71,0.31);         // bedrooms bottom wall
+  seg(0.71,0.00,0.71,0.46);         // stairwell left wall
+  seg(0.26,0.31,0.26,0.56);         // bath | hall
+  seg(0.00,0.56,0.26,0.56);         // bath bottom wall
+  seg(0.26,0.46,0.40,0.46);         // hall bottom (partial — wide opening into living)
+
+  // ---- envelope walls (thick outline) + stairwell box ----
+  ctx.strokeStyle=wallO; ctx.lineWidth=3.5; footPath(); ctx.stroke();
+  ctx.strokeRect(stv.x,stv.y,stv.w,stv.h);
+
+  // mark the west wall as a shared party wall (hatch) — no window, no solar gain
+  ctx.strokeStyle='rgba(120,134,153,.5)'; ctx.lineWidth=1; const hx=fx(0);
+  for(let v=0.02; v<0.99; v+=0.045){ctx.beginPath();ctx.moveTo(hx,fy(v));ctx.lineTo(hx+7,fy(v)+8);ctx.stroke();}
+
+  // ---- windows (gaps coloured by sun) ----
+  function win(a1,a2,coord,lit,horiz){const c= lit?(glancing?'#d8b13e':'#ffd24d'):'#3aa0ff';
+    ctx.strokeStyle=c; ctx.lineWidth=5.5; ctx.beginPath();
+    if(horiz){ctx.moveTo(fx(a1),fy(coord));ctx.lineTo(fx(a2),fy(coord));}
+    else{ctx.moveTo(fx(coord),fy(a1));ctx.lineTo(fx(coord),fy(a2));}
+    ctx.stroke();
+    if(lit&&!glancing){ctx.strokeStyle='rgba(255,210,77,.35)';ctx.lineWidth=11;ctx.stroke();}}
+  // only the NORTH (bedrooms) and SOUTH (living/balcony) facades are exterior; the
+  // east + west walls are shared party walls to the neighbouring flats — no glazing,
+  // no solar gain there.
+  win(0.04,0.30,0.00,bedsLit,true);    // Bedroom 1 — north window
+  win(0.42,0.66,0.00,bedsLit,true);    // Bedroom 2 — north window
+  win(0.04,0.42,1.00,livingLit,true);  // living — south balcony glazing
+
+  // ---- balcony deck (outside the south wall, bottom-left only) ----
+  const balY=fy(1.00), balH=30, balX=fx(0.02), balW=0.44*PW;
+  ctx.fillStyle='#12171f'; ctx.fillRect(balX,balY+2,balW,balH);
+  ctx.strokeStyle='#34433a'; ctx.lineWidth=1;
+  for(let i=0;i<9;i++){const x=balX+6+i*((balW-12)/8);ctx.beginPath();ctx.moveTo(x,balY+5);ctx.lineTo(x,balY+balH);ctx.stroke();}
+  ctx.strokeStyle='#26303b'; ctx.strokeRect(balX,balY+2,balW,balH);
+
+  // ---- furniture ----
+  ctx.lineWidth=1.3;
+  const box=(a,b,c,d,fill)=>{const x=fx(a),y=fy(b);if(fill){ctx.fillStyle=fill;ctx.fillRect(x,y,(c-a)*PW,(d-b)*PH);}ctx.strokeStyle='#4d5a6b';ctx.strokeRect(x,y,(c-a)*PW,(d-b)*PH);};
+  // beds
+  box(0.05,0.04,0.30,0.21,'#222c3a'); box(0.05,0.04,0.30,0.08,'#2c3848');   // Bedroom 1 bed + pillows
+  box(0.43,0.04,0.65,0.20,'#222c3a'); box(0.43,0.04,0.65,0.08,'#2c3848');   // Bedroom 2 bed + pillow
+  // central galley kitchen counter (sink high, cooktop low) — divides kitchen from living
+  box(0.46,0.46,0.55,0.74,'#202935');
+  ctx.strokeStyle='#566476';
+  ctx.beginPath();ctx.ellipse(fx(0.505),fy(0.52),5,7,0,0,7);ctx.stroke();   // sink
+  [[0.485,0.65],[0.525,0.65],[0.485,0.69],[0.525,0.69]].forEach(p=>{ctx.beginPath();ctx.arc(fx(p[0]),fy(p[1]),3.2,0,7);ctx.stroke();}); // 4 burners
+  // living: sofa + coffee table (lower-left), dining table (upper-centre of the open area)
+  box(0.04,0.70,0.30,0.78,'#243040');                                       // sofa
+  box(0.12,0.81,0.24,0.88,'#28323f');                                       // coffee table
+  box(0.30,0.55,0.43,0.66,'#28323f');                                       // dining table
+  ctx.fillStyle='#3a4655'; [[0.29,0.575],[0.29,0.635],[0.44,0.575],[0.44,0.635],[0.365,0.53]].forEach(p=>{ctx.beginPath();ctx.arc(fx(p[0]),fy(p[1]),3,0,7);ctx.fill();});
+  // bath fixtures
+  box(0.02,0.33,0.09,0.40,'#283440');                                       // sink unit
+  box(0.02,0.46,0.10,0.54,'#283440');                                       // tub
+  ctx.strokeStyle='#7d8a99'; ctx.beginPath();ctx.arc(fx(0.20),fy(0.51),5,0,7);ctx.stroke(); // toilet
+  // closet cross-hatch
+  ctx.strokeStyle='#2a323d'; ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(fx(0.00),fy(0.56));ctx.lineTo(fx(0.26),fy(0.64));
+  ctx.moveTo(fx(0.26),fy(0.56));ctx.lineTo(fx(0.00),fy(0.64));ctx.stroke();
+
+  // ---- door swing arcs ----
+  ctx.strokeStyle='#3b4757'; ctx.lineWidth=1;
+  const arc=(axf,ayf,r,a0,a1)=>{ctx.beginPath();ctx.arc(fx(axf),fy(ayf),r,a0,a1);ctx.stroke();};
+  arc(0.71,0.40,15,0.5*Math.PI,Math.PI);     // entry from the stairwell into the hall
+  arc(0.30,0.31,13,Math.PI,1.5*Math.PI);     // Bedroom 1 door
+  arc(0.45,0.31,13,1.5*Math.PI,2*Math.PI);   // Bedroom 2 door
+  arc(0.24,0.31,12,0.5*Math.PI,Math.PI);     // bathroom door
+  arc(0.30,1.00,14,Math.PI,1.5*Math.PI);     // balcony door
+
+  // ---- room labels (English, as on the colourised reference) ----
+  label('Bedroom 1',0.17,0.27,'#9fc0e6',10.5);
+  label('Bedroom 2',0.54,0.27,'#9ad0ad',10.5);
+  label('Bathroom',0.13,0.43,'#ccc488',9.5);
+  label('Entrance',0.48,0.36,'#9aa6b5',9.5); label('/ Hall',0.48,0.40,'#9aa6b5',9.5);
+  label('Kitchen /',0.26,0.49,'#c8bd9a',10); label('Living area',0.26,0.525,'#c8bd9a',10);
+  label('Stairs',0.845,0.41,'#6b7686',9);
+  label('Balcony',0.22,1.12,'#7fae8f',10.5);
+
+  // ================= SUN + RAYS =================
+  if(up){
+    const v=vec(s.az), sx=cx+v[0]*(RAD+30), sy=cy+v[1]*(RAD+30), rad=9+s.elev/6;
+    // rays toward the flat
+    ctx.strokeStyle=`rgba(255,207,77,${0.12+0.45*Math.sin(s.elev*D2R)})`; ctx.lineWidth=2;
+    for(let k=-3;k<=3;k++){ctx.beginPath();ctx.moveTo(sx-v[1]*k*9,sy+v[0]*k*9);
+      ctx.lineTo(cx-v[1]*k*9,cy+v[0]*k*9);ctx.stroke();}
+    const gr=ctx.createRadialGradient(sx,sy,2,sx,sy,rad+12);
+    gr.addColorStop(0,'#fff6cf'); gr.addColorStop(.5,'#ffcf4d'); gr.addColorStop(1,'rgba(255,207,77,0)');
+    ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(sx,sy,rad+12,0,7); ctx.fill();
+    ctx.fillStyle='#ffd86a'; ctx.beginPath(); ctx.arc(sx,sy,rad,0,7); ctx.fill();
+  } else {
+    ctx.fillStyle='#6a778a'; ctx.font='13px system-ui'; ctx.textAlign='center';
+    ctx.fillText('☾ sun below horizon — open up and flush the heat', cx, cy+RAD+50);
+  }
+
+  // ---------- tips ----------
+  let t;
+  if(!up) t='<b>Night.</b> Outdoor air drops toward ~13 °C. Open the balcony door + a bedroom window and run a floor fan in a window blowing <b>out</b> — pull cool air through, dump the day\'s heat.';
+  else if(livingLit&&s.elev>25) t='<b>Living room is taking direct sun.</b> Close its blinds/curtains now and keep those windows shut — this is the heat you fight all evening.';
+  else if(bedsLit&&glancing) t='Low <b>'+compass(s.az)+'</b> sun is glancing the bedroom windows. Mild, but a curtain keeps the sleep rooms cool for tonight.';
+  else if(livingLit) t='Sun on the living/balcony side — curtains down there. The bedrooms are your cool retreat right now.';
+  else t='Shaded side is calm right now. Save the heavy shading for whichever side the sun swings to next.';
+  g('tips').innerHTML=t;
+}
+
+// ---- wiring ----
+['date','time','face'].forEach(id=>g(id).addEventListener('input',draw));
+let playing=false, raf=null;
+g('play').addEventListener('click',function(){
+  playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play day';
+  const step=()=>{ if(!playing)return; g('time').value=(+g('time').value+8)%1440; draw();
+    raf=requestAnimationFrame(()=>setTimeout(step,40)); };
+  playing?step():cancelAnimationFrame(raf);
+});
+g('noon').addEventListener('click',()=>{
+  const d=new Date(g('date').value+'T00:00:00'),N=dayOfYear(d);
+  const B=D2R*360*(N-81)/364,eot=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);
+  const tc=eot+4*(LON-15*UTC); g('time').value=Math.round(720-tc); draw();
+});
+draw();
+</script>
+</body>
+</html>

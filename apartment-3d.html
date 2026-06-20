@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Sun &amp; Heat Simulator — Odense</title>
+<style>
+  :root{
+    --bg:#0c0f15; --panel:#141923; --panel2:#10141c; --line:#262e3a; --txt:#eaeff6; --mut:#9aa6b5;
+    --sun:#ffcf4d; --hot:#ff7a59; --cool:#5ec8ff; --glass:#3aa0ff; --lit:#ffd24d; --accent:#7cd6a0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 700px at 70% -10%,#161d29,transparent),var(--bg);
+    color:var(--txt);font:15px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{padding:20px 24px 4px}
+  h1{margin:0;font-size:20px;font-weight:680;letter-spacing:.2px}
+  .sub{color:var(--mut);font-size:13px;margin-top:3px}
+  .sub a{color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  .sub a:hover{filter:brightness(1.1)}
+  .wrap{display:flex;gap:18px;flex-wrap:wrap;padding:14px 24px 34px;align-items:flex-start}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  #view{display:block;border-radius:12px;width:100%;height:560px;max-width:560px;margin:0 auto;
+    background:radial-gradient(420px 420px at 50% 46%,#11161f,#0a0d12);cursor:grab;touch-action:none}
+  #view:active{cursor:grabbing}
+  .card:first-child{flex:1 1 360px;min-width:0}
+  .controls{flex:1 1 320px;min-width:0;max-width:440px}
+  .row{margin:15px 0}
+  label{display:block;font-size:13px;color:var(--mut);margin-bottom:7px}
+  input[type=range]{width:100%;accent-color:var(--accent);height:30px}
+  input[type=date]{background:#0f141c;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+  input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(.85);cursor:pointer;opacity:.8}
+  input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:1}
+  .readout{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .stat{background:#10151d;border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+  .stat .k{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  .stat .v{font-size:17px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px}
+  .lit-yes{color:var(--hot)} .lit-no{color:var(--cool)}
+  button{background:#1d2632;color:var(--txt);border:1px solid var(--line);
+    border-radius:10px;padding:9px 14px;font-size:14px;cursor:pointer;transition:.15s}
+  button:hover{border-color:#465264;background:#222d3b}
+  button.play{background:var(--accent);color:#06140c;border:none;font-weight:680}
+  button.play:hover{filter:brightness(1.06)}
+  .tips{margin-top:15px;font-size:13.5px;color:var(--txt);background:#10151d;border:1px solid var(--line);
+    border-left:3px solid var(--lit);border-radius:10px;padding:11px 13px}
+  .tips b{color:var(--lit)}
+  .legend{display:flex;gap:15px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:11px;justify-content:center}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .hint{font-size:12px;color:var(--mut);margin-top:9px;text-align:center}
+  .btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  @media (max-width:640px){
+    body{font-size:14px}
+    header{padding:12px 14px 2px} h1{font-size:18px}
+    .wrap{padding:8px 12px 26px;gap:10px;flex-direction:column}
+    .card{padding:10px;border-radius:14px}
+    .controls{max-width:none;flex-basis:auto}
+    #view{height:46vh;max-width:none}
+    .legend{gap:8px 14px;font-size:11px;margin-top:7px}
+    button{padding:11px 14px}
+    .stat{padding:9px 11px} .stat .v{font-size:16px}
+    .row{margin:12px 0}
+  }
+  @media (max-width:380px){ .readout{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧊 3D Sun &amp; Heat Simulator</h1>
+  <div class="sub">Odense · 55.40°N, 10.39°E · top-floor flat — a rotatable dollhouse view.
+    &nbsp;·&nbsp; <a href="index.html">← back to the 2D floor-plan</a></div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <canvas id="view"></canvas>
+    <div class="hint">drag to orbit · right-drag (or two fingers) to pan · scroll / pinch to zoom</div>
+    <div class="legend">
+      <span><i style="background:var(--lit)"></i>window in direct sun</span>
+      <span><i style="background:var(--glass)"></i>window shaded</span>
+      <span><i style="background:var(--sun)"></i>sun</span>
+      <span><i style="background:#3b4654"></i>stairwell</span>
+    </div>
+  </div>
+
+  <div class="card controls">
+    <div class="row">
+      <label>Date</label>
+      <input type="date" id="date" value="2026-07-01">
+    </div>
+
+    <div class="row">
+      <label>Time of day — <span id="timeLbl">15:00</span> (clock, CEST)</label>
+      <input type="range" id="time" min="0" max="1439" step="5" value="900">
+      <div class="btns" style="margin-top:9px">
+        <button class="play" id="play">▶ Play day</button>
+        <button id="now">⌖ Now</button>
+        <button id="noon">Jump to solar noon</button>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="stat"><div class="k">Sun elevation</div><div class="v" id="elev">–</div></div>
+      <div class="stat"><div class="k">Sun compass</div><div class="v" id="az">–</div></div>
+      <div class="stat"><div class="k">Living / balcony (S)</div><div class="v" id="litLiving">–</div></div>
+      <div class="stat"><div class="k">Bedrooms (N)</div><div class="v" id="litBeds">–</div></div>
+      <div class="stat"><div class="k">Solar time</div><div class="v" id="solar">–</div></div>
+      <div class="stat"><div class="k">Daylight</div><div class="v" id="daylen">–</div></div>
+    </div>
+
+    <div class="tips" id="tips"></div>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script>
+const D2R=Math.PI/180, R2D=180/Math.PI;
+const LAT=55.40, LON=10.39, UTC=2;            // Odense, CEST
+// Same fixed orientation as the 2D plan: bedrooms face true 354° (≈N),
+// the balcony/living side faces the opposite, 174° (≈S).
+const FACE=174;
+const g=id=>document.getElementById(id);
+
+function dayOfYear(d){const s=new Date(d.getFullYear(),0,0);return Math.floor((d-s)/86400000);}
+function compass(az){const n=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return n[Math.round((((az%360)+360)%360)/22.5)%16];}
+function adiff(a,b){let d=Math.abs(a-b)%360; return d>180?360-d:d;}
+
+// ---- solar position (identical model to the 2D page) ----
+function sun(dateStr, clockMin){
+  const d=new Date(dateStr+'T00:00:00'); const N=dayOfYear(d);
+  const decl=23.45*Math.sin(D2R*360*(284+N)/365);
+  const B=D2R*360*(N-81)/364;
+  const eot=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);
+  const tc=eot+4*(LON-15*UTC);
+  const solarHour=(clockMin+tc)/60;
+  const H=15*(solarHour-12);
+  const sinEl=Math.sin(LAT*D2R)*Math.sin(decl*D2R)+Math.cos(LAT*D2R)*Math.cos(decl*D2R)*Math.cos(H*D2R);
+  const elev=Math.asin(Math.max(-1,Math.min(1,sinEl)))*R2D;
+  let cosAz=(Math.sin(decl*D2R)-Math.sin(elev*D2R)*Math.sin(LAT*D2R))/(Math.cos(elev*D2R)*Math.cos(LAT*D2R));
+  cosAz=Math.max(-1,Math.min(1,cosAz)); let az=Math.acos(cosAz)*R2D; if(H>0) az=360-az;
+  const cosH0=-Math.tan(LAT*D2R)*Math.tan(decl*D2R);
+  let dayHours=24; if(cosH0>=-1&&cosH0<=1){dayHours=2*Math.acos(cosH0)*R2D/15;}
+  return {elev,az,solarHour,dayHours};
+}
+
+// ============================================================
+//  Floor-plan geometry — same fractions/rooms as the 2D plan.
+//  Plan box PW x PH; north = -Z (top), south/balcony = +Z (bottom),
+//  east = +X, west = -X.  Height (ceiling) runs up +Y.
+// ============================================================
+const PW=216, PH=288, WH=52;                       // plan size + wall (ceiling) height
+const wx=f=>f*PW-PW/2;                              // plan-x fraction -> world X
+const wz=f=>f*PH-PH/2;                              // plan-y fraction -> world Z
+const R={
+  bed1   :[0.00,0.00,0.35,0.31],
+  bed2   :[0.39,0.00,0.69,0.31],
+  stair  :[0.71,0.00,0.98,0.46],
+  bath   :[0.00,0.31,0.26,0.56],
+  hall   :[0.26,0.31,0.71,0.46],
+  closet :[0.00,0.56,0.26,0.64],
+  living :[0.00,0.46,0.55,1.00],
+  kalcove:[0.55,0.46,0.71,0.62]
+};
+const FOOT=[[0,0],[0.98,0],[0.98,0.46],[0.71,0.46],[0.71,0.62],[0.55,0.62],[0.55,1.00],[0,1.00]];
+
+// ---- three.js scene ----
+const canvas=g('view');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+if('outputColorSpace' in renderer) renderer.outputColorSpace=THREE.SRGBColorSpace;
+else renderer.outputEncoding=THREE.sRGBEncoding;
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(45,1,1,3000);
+camera.position.set(210,250,300);
+
+const controls=new THREE.OrbitControls(camera,canvas);
+controls.enableDamping=true; controls.dampingFactor=0.08;
+controls.target.set(0,18,0);
+controls.minDistance=120; controls.maxDistance=900;
+controls.maxPolarAngle=Math.PI*0.495;             // keep the camera above the ground
+
+// ---- lights ----
+const hemi=new THREE.HemisphereLight(0xbcd2ff,0x2a2620,0.55); scene.add(hemi);
+const ambient=new THREE.AmbientLight(0xffffff,0.18); scene.add(ambient);
+const sunLight=new THREE.DirectionalLight(0xfff3d0,2.4);
+sunLight.castShadow=true;
+sunLight.shadow.mapSize.set(2048,2048);
+const sc=sunLight.shadow.camera; sc.near=10; sc.far=1400;
+sc.left=-260; sc.right=260; sc.top=260; sc.bottom=-260;
+scene.add(sunLight); scene.add(sunLight.target);
+
+// sun ball
+const sunBall=new THREE.Mesh(new THREE.SphereGeometry(11,24,24),
+  new THREE.MeshBasicMaterial({color:0xffd86a}));
+scene.add(sunBall);
+const sunGlow=new THREE.Mesh(new THREE.SphereGeometry(20,24,24),
+  new THREE.MeshBasicMaterial({color:0xffcf4d,transparent:true,opacity:0.25}));
+scene.add(sunGlow);
+
+// ---- ground + compass ----
+const ground=new THREE.Mesh(new THREE.CircleGeometry(560,64),
+  new THREE.MeshStandardMaterial({color:0x171c25,roughness:1}));
+ground.rotation.x=-Math.PI/2; ground.position.y=-0.6; ground.receiveShadow=true; scene.add(ground);
+const ring=new THREE.Mesh(new THREE.RingGeometry(232,236,72),
+  new THREE.MeshBasicMaterial({color:0x2b3340,side:THREE.DoubleSide}));
+ring.rotation.x=-Math.PI/2; ring.position.y=0.2; scene.add(ring);
+
+function azDir(az,r){ // horizontal world position for a compass azimuth
+  return new THREE.Vector3(Math.sin(az*D2R)*r, 0, -Math.cos(az*D2R)*r);
+}
+function textSprite(txt,color,size){
+  const c=document.createElement('canvas'); c.width=c.height=128;
+  const x=c.getContext('2d'); x.fillStyle=color; x.font='bold 80px system-ui';
+  x.textAlign='center'; x.textBaseline='middle'; x.fillText(txt,64,68);
+  const t=new THREE.CanvasTexture(c);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true}));
+  s.scale.set(size,size,1); return s;
+}
+[['N',0,'#dfe7f1'],['E',90,'#8a96a6'],['S',180,'#8a96a6'],['W',270,'#8a96a6']].forEach(([t,a,c])=>{
+  const s=textSprite(t,c,t==='N'?34:28); const p=azDir(a,256); s.position.set(p.x,16,p.z); scene.add(s);
+});
+
+// ---- materials ----
+const M=(col,opt={})=>new THREE.MeshStandardMaterial(Object.assign({color:col,roughness:0.85,metalness:0.02},opt));
+const wallMat   =M(0xd2d8e1,{roughness:0.95});
+const floorMats={
+  living :M(0x9c8b67), bed1:M(0x4d6f97), bed2:M(0x53916d), bath:M(0xa1955a),
+  hall   :M(0x6d7480), closet:M(0x5b5246), kalcove:M(0x9c8b67), stair:M(0x3a4049)
+};
+const furnMat   =M(0x55617a);
+const woodMat   =M(0x8a7150,{roughness:0.7});
+const fabricMat =M(0x4f6178,{roughness:0.95});
+
+// ---- builders ----
+const flat=new THREE.Group(); scene.add(flat);
+
+function addBox(w,h,d,x,y,z,mat,shadow=true){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+  m.position.set(x,y,z); m.castShadow=shadow; m.receiveShadow=true; flat.add(m); return m;
+}
+// floor tile from a room rect (fractions)
+function floorTile(r,mat){
+  const w=(r[2]-r[0])*PW, d=(r[3]-r[1])*PH;
+  const x=wx((r[0]+r[2])/2), z=wz((r[1]+r[3])/2);
+  return addBox(w,1.4,d,x,0.7,z,mat,false);
+}
+// furniture box from a room rect (fractions) with a height + base offset
+function furn(r,h,mat,base=0){
+  const w=(r[2]-r[0])*PW, d=(r[3]-r[1])*PH;
+  const x=wx((r[0]+r[2])/2), z=wz((r[1]+r[3])/2);
+  return addBox(w,h,d,x,base+h/2+1.4,z,mat);
+}
+// an axis-aligned wall between two plan points
+function wallEdge(p1,p2,h,thick){
+  const x1=wx(p1[0]),z1=wz(p1[1]),x2=wx(p2[0]),z2=wz(p2[1]);
+  const horiz=Math.abs(z2-z1)<Math.abs(x2-x1);
+  const w=horiz?Math.abs(x2-x1)+thick:thick;
+  const d=horiz?thick:Math.abs(z2-z1)+thick;
+  addBox(w,h,d,(x1+x2)/2,h/2,(z1+z2)/2,wallMat);
+}
+
+// base footprint floor (the L outline) via a shape
+(function(){
+  const sh=new THREE.Shape();
+  FOOT.forEach((p,i)=>{const X=wx(p[0]),Y=-wz(p[1]); i?sh.lineTo(X,Y):sh.moveTo(X,Y);});
+  sh.closePath();
+  const geo=new THREE.ShapeGeometry(sh);
+  const m=new THREE.Mesh(geo,floorMats.living);
+  m.rotation.x=-Math.PI/2; m.position.y=0.1; m.receiveShadow=true; flat.add(m);
+})();
+
+// room floor tiles
+floorTile(R.bed1,floorMats.bed1); floorTile(R.bed2,floorMats.bed2);
+floorTile(R.bath,floorMats.bath); floorTile(R.hall,floorMats.hall);
+floorTile(R.closet,floorMats.closet); floorTile(R.stair,floorMats.stair);
+
+// exterior walls (the L envelope)
+for(let i=0;i<FOOT.length;i++){ wallEdge(FOOT[i],FOOT[(i+1)%FOOT.length],WH,4); }
+// stairwell partition (separates the stair shaft from the flat)
+wallEdge([0.71,0.00],[0.71,0.46],WH,4);
+
+// interior partitions (same segments as the 2D plan)
+[[ [0.37,0.00],[0.37,0.31] ],
+ [ [0.00,0.31],[0.71,0.31] ],
+ [ [0.26,0.31],[0.26,0.56] ],
+ [ [0.00,0.56],[0.26,0.56] ],
+ [ [0.26,0.46],[0.40,0.46] ]].forEach(s=>wallEdge(s[0],s[1],WH,2.6));
+
+// ---- windows (recoloured each frame by sun state) ----
+const winMat=()=>new THREE.MeshStandardMaterial({color:0x3aa0ff,emissive:0x16314d,
+  emissiveIntensity:0.6,roughness:0.35,metalness:0.1,transparent:true,opacity:0.78});
+// {span fractions, plan-y edge, side normal (+/-1 along Z), array tag}
+function windowPane(f0,f1,edgeY,outward){
+  const w=(f1-f0)*PW, x=wx((f0+f1)/2);
+  const z=wz(edgeY)+outward*3;
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,26,3),winMat());
+  m.position.set(x,24,z); flat.add(m); return m;
+}
+const bedWindows=[ windowPane(0.04,0.30,0.00,-1),   // Bedroom 1 — north
+                   windowPane(0.42,0.66,0.00,-1) ]; // Bedroom 2 — north
+const livingWindows=[ windowPane(0.04,0.42,1.00,1) ]; // living/balcony — south
+
+// ---- balcony deck (south, bottom-left) ----
+(function(){
+  const f0=0.02,f1=0.46, w=(f1-f0)*PW, x=wx((f0+f1)/2), z=wz(1.0)+18;
+  addBox(w,2,34,x,1,z,woodMat);                       // deck slab
+  // railing posts + top rail
+  const railMat=M(0x39433b,{roughness:0.8});
+  addBox(w,2,2,x,16,z+16,railMat);
+  for(let i=0;i<=8;i++){ const px=wx(f0)+ (w)*(i/8); addBox(2,16,2,px,8,z+16,railMat); }
+})();
+
+// ---- furniture ----
+furn([0.05,0.04,0.30,0.21],12,fabricMat);                 // Bedroom 1 bed
+furn([0.43,0.04,0.65,0.20],12,fabricMat);                 // Bedroom 2 bed
+furn([0.46,0.46,0.55,0.74],17,furnMat);                   // galley kitchen counter
+furn([0.04,0.70,0.30,0.78],15,fabricMat);                 // sofa
+furn([0.12,0.81,0.24,0.88],7,woodMat);                    // coffee table
+furn([0.30,0.55,0.43,0.66],11,woodMat);                   // dining table
+furn([0.02,0.33,0.09,0.40],13,furnMat);                   // bath sink unit
+furn([0.02,0.46,0.10,0.54],9,furnMat);                    // tub
+// a couple of winder steps to hint at the stairwell
+for(let i=0;i<5;i++){ furn([0.74+ i*0.005,0.05+i*0.07,0.95-i*0.02,0.12+i*0.07], 4+i*7, floorMats.stair); }
+
+// ============================================================
+//  Per-frame update: sun position, lighting, window colours, UI
+// ============================================================
+let curElev=10;
+function updateScene(){
+  const dateStr=g('date').value, clockMin=+g('time').value, face=FACE;
+  const bedFace=(face+180)%360, s=sun(dateStr,clockMin);
+  curElev=s.elev;
+
+  const hh=String(Math.floor(clockMin/60)).padStart(2,'0'), mm=String(clockMin%60).padStart(2,'0');
+  g('timeLbl').textContent=`${hh}:${mm}`;
+  g('elev').textContent= s.elev>0? s.elev.toFixed(0)+'°':'below horizon';
+  g('az').textContent= s.elev>0? `${compass(s.az)} (${s.az.toFixed(0)}°)`:'–';
+  const sh=((s.solarHour%24)+24)%24;
+  g('solar').textContent=`${String(Math.floor(sh)).padStart(2,'0')}:${String(Math.round((sh%1)*60)).padStart(2,'0')}`;
+  g('daylen').textContent=s.dayHours.toFixed(1)+' h';
+
+  const up=s.elev>0, glancing=s.elev>0&&s.elev<12;
+  const livingLit=up&&adiff(s.az,face)<90, bedsLit=up&&adiff(s.az,bedFace)<90;
+  const litTxt=on=>on?(glancing?'sun (low/weak)':'IN SUN'):'shaded';
+  g('litLiving').innerHTML=`<span class="${livingLit?'lit-yes':'lit-no'}">${litTxt(livingLit)}</span>`;
+  g('litBeds').innerHTML=`<span class="${bedsLit?'lit-yes':'lit-no'}">${litTxt(bedsLit)}</span>`;
+
+  // --- sun position in 3D ---
+  const elv=Math.max(s.elev,up?2:-8);
+  const r=420, ce=Math.cos(elv*D2R);
+  const sp=new THREE.Vector3(Math.sin(s.az*D2R)*ce, Math.sin(elv*D2R), -Math.cos(s.az*D2R)*ce).multiplyScalar(r);
+  sunBall.position.copy(sp); sunGlow.position.copy(sp);
+  sunBall.visible=sunGlow.visible=up;
+  sunLight.position.copy(sp); sunLight.target.position.set(0,0,0);
+  sunLight.intensity=up? (0.5+2.2*Math.sin(s.elev*D2R)) : 0;
+
+  // day/night ambient + sky
+  const t=Math.max(0,Math.sin(s.elev*D2R));
+  hemi.intensity=0.18+0.5*t; ambient.intensity=0.10+0.16*t;
+  const skyTop=new THREE.Color().setRGB(0.06+0.30*t,0.08+0.40*t,0.14+0.55*t);
+  scene.background=up?skyTop:new THREE.Color(0x070a10);
+
+  // --- window colours ---
+  const setWin=(arr,lit)=>arr.forEach(m=>{
+    if(lit){ m.material.color.set(glancing?0xe9c54f:0xffd24d);
+             m.material.emissive.set(glancing?0x6b5410:0xffb028);
+             m.material.emissiveIntensity=glancing?0.6:1.1; m.material.opacity=0.92; }
+    else   { m.material.color.set(0x3aa0ff); m.material.emissive.set(0x16314d);
+             m.material.emissiveIntensity=0.5; m.material.opacity=0.72; }
+  });
+  setWin(livingWindows,livingLit); setWin(bedWindows,bedsLit);
+
+  // --- tips (same guidance as the 2D page) ---
+  let tip;
+  if(!up) tip='<b>Night.</b> Outdoor air drops toward ~13 °C. Open the balcony door + a bedroom window and run a floor fan in a window blowing <b>out</b> — pull cool air through, dump the day\'s heat.';
+  else if(livingLit&&s.elev>25) tip='<b>Living room is taking direct sun.</b> Close its blinds/curtains now and keep those windows shut — this is the heat you fight all evening.';
+  else if(bedsLit&&glancing) tip='Low <b>'+compass(s.az)+'</b> sun is glancing the bedroom windows. Mild, but a curtain keeps the sleep rooms cool for tonight.';
+  else if(livingLit) tip='Sun on the living/balcony side — curtains down there. The bedrooms are your cool retreat right now.';
+  else tip='Shaded side is calm right now. Save the heavy shading for whichever side the sun swings to next.';
+  g('tips').innerHTML=tip;
+}
+
+// ---- render loop ----
+function resize(){
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  if(canvas.width!==w*renderer.getPixelRatio()||canvas.height!==h*renderer.getPixelRatio()){
+    renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+  }
+}
+function loop(){ resize(); controls.update(); renderer.render(scene,camera); requestAnimationFrame(loop); }
+loop();
+
+// ---- wiring (matches the 2D page) ----
+['date','time'].forEach(id=>g(id).addEventListener('input',updateScene));
+let playing=false, raf=null;
+g('play').addEventListener('click',function(){
+  playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play day';
+  const step=()=>{ if(!playing)return; g('time').value=(+g('time').value+8)%1440; updateScene();
+    raf=requestAnimationFrame(()=>setTimeout(step,40)); };
+  playing?step():cancelAnimationFrame(raf);
+});
+g('noon').addEventListener('click',()=>{
+  const d=new Date(g('date').value+'T00:00:00'),N=dayOfYear(d);
+  const B=D2R*360*(N-81)/364,eot=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);
+  const tc=eot+4*(LON-15*UTC); g('time').value=Math.round(720-tc); updateScene();
+});
+function setNow(){
+  const now=new Date(), pad=n=>String(n).padStart(2,'0');
+  g('date').value=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  g('time').value=Math.min(1439,Math.round((now.getHours()*60+now.getMinutes())/5)*5);
+  updateScene();
+}
+g('now').addEventListener('click',()=>{ playing=false; g('play').textContent='▶ Play day'; setNow(); });
+setNow();
+</script>
+</body>
+</html>
